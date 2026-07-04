@@ -1,0 +1,1446 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#2FB4CC">
+<title>にっぽんマップメモ | Japan Map Memo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700;900&family=Baloo+2:wght@600;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --sea:#2FB4CC;
+    --ink:#25455C;
+    --card:#FFFFFF;
+    --pin:#FF8A3D;
+    --pin-dark:#E56A1A;
+    --accent:#FFD23F;
+    --ok:#39C27A;
+    --danger:#F26D6D;
+    --radius:18px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  html{background:var(--sea);color-scheme:light}
+  body{
+    font-family:"Zen Maru Gothic","Baloo 2",sans-serif;
+    background:var(--sea);
+    color:var(--ink);
+    overflow:hidden;
+    touch-action:none;
+  }
+  .ic{width:1em;height:1em;display:inline-block;vertical-align:-.12em;fill:currentColor}
+
+  /* ---------- header ---------- */
+  header{
+    position:fixed;top:0;left:0;right:0;z-index:20;
+    display:flex;align-items:flex-start;gap:12px;
+    padding:14px 18px;pointer-events:none;
+  }
+  header .title{
+    pointer-events:auto;background:var(--card);border-radius:999px;
+    padding:10px 20px 10px 14px;display:flex;align-items:center;gap:10px;
+    box-shadow:0 8px 0 rgba(23,90,108,.25);
+  }
+  header .title .logo{
+    width:34px;height:34px;border-radius:50%;background:var(--pin);
+    display:grid;place-items:center;color:#fff;font-size:18px;
+    box-shadow:inset 0 -4px 0 rgba(0,0,0,.15);
+  }
+  header h1{font-size:18px;font-weight:900;letter-spacing:.02em}
+  header h1 small{display:block;font-family:"Baloo 2";font-size:10px;font-weight:800;color:#7BA2B5;letter-spacing:.18em;text-transform:uppercase}
+
+  /* 選択中の県名バッジ(ヘッダー位置に表示) */
+  #prefBadge{
+    position:fixed;top:14px;left:18px;z-index:21;
+    background:var(--card);border-radius:999px;
+    padding:10px 24px 10px 16px;display:none;align-items:center;gap:12px;
+    box-shadow:0 8px 0 rgba(23,90,108,.25);
+    animation:pop .3s cubic-bezier(.34,1.6,.5,1);
+  }
+  #prefBadge .dot{width:15px;height:15px;border-radius:5px;flex:none}
+  #prefBadge .nm{font-size:21px;font-weight:900;line-height:1.1}
+  #prefBadge .rg{font-size:10px;font-weight:700;color:#7BA2B5}
+  @keyframes pop{from{transform:scale(.6);opacity:0}to{transform:scale(1);opacity:1}}
+
+  /* ---------- legend ---------- */
+  #legend{
+    position:fixed;left:18px;bottom:16px;z-index:15;
+    display:flex;flex-wrap:wrap;gap:6px;max-width:min(520px,55vw);
+  }
+  #legend .chip{
+    display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.92);
+    border-radius:999px;padding:5px 12px;font-size:11px;font-weight:700;
+    box-shadow:0 4px 0 rgba(23,90,108,.2);
+  }
+  #legend .chip i{width:10px;height:10px;border-radius:3px;display:inline-block}
+
+  /* ---------- map ---------- */
+  #stage{position:fixed;inset:0;cursor:grab}
+  /* 波マーク: ワールド座標に置くので回転・拡大に完全追従。
+     小さな曲線のゆらぎだけなので描画コストは極小 */
+  .wave{animation:waveSway 5.5s ease-in-out infinite alternate;opacity:.2}
+  .wave.w1{animation-duration:7.5s}
+  .wave.w2{animation-duration:9s}
+  @keyframes waveSway{
+    0%  {transform:translateX(-8px);opacity:.09}
+    50% {opacity:.28}
+    100%{transform:translateX(8px);opacity:.09}
+  }
+  }
+  }
+  #stage.dragging{cursor:grabbing}
+  svg{width:100%;height:100%;display:block}
+  .tile{cursor:pointer}
+  .tile .body{transition:transform .18s cubic-bezier(.34,1.6,.5,1)}
+  .tile:hover .body{transform:translateY(-7px)}
+  .tile.selected .body{transform:translateY(-12px)}
+  .tile text{font-family:"Zen Maru Gothic",sans-serif;font-weight:700;pointer-events:none;user-select:none}
+  .pin-g{pointer-events:none}
+  .pin-drop{animation:pindrop .5s cubic-bezier(.34,1.6,.5,1)}
+  @keyframes pindrop{0%{transform:translateY(-46px);opacity:0}60%{transform:translateY(4px);opacity:1}100%{transform:translateY(0)}}
+
+  /* ---------- コントロール(右下): 丸ボタンスタイル ---------- */
+  #controls{
+    position:fixed;right:16px;bottom:16px;z-index:20;
+    display:flex;flex-direction:column;gap:10px;align-items:center;
+  }
+  .cbtn{
+    width:44px;height:44px;border-radius:50%;border:none;cursor:pointer;
+    background:var(--card);color:var(--ink);font-size:17px;
+    display:grid;place-items:center;
+    box-shadow:0 6px 0 rgba(23,90,108,.28);
+    transition:transform .12s, box-shadow .12s;
+  }
+  .cbtn:active{transform:translateY(4px);box-shadow:0 2px 0 rgba(23,90,108,.28)}
+  .cbtn.big{width:52px;height:52px;font-size:21px}
+  #controls .group{
+    display:flex;flex-direction:column;gap:10px;
+  }
+  #compassBtn .needle{transition:transform .2s}
+
+  /* ---------- 吹き出しプレビュー ---------- */
+  #bubble{
+    position:fixed;z-index:22;display:none;
+    width:min(280px,74vw);
+    background:var(--card);border-radius:20px;
+    box-shadow:0 10px 0 rgba(23,90,108,.28);
+    padding:14px 14px 12px;
+    transform:translate(-50%,-100%);
+    transform-origin:50% calc(100% + 16px);   /* しっぽの先=タイル側を起点に */
+  }
+  #bubble.grow{animation:bubbleGrow .42s cubic-bezier(.34,1.56,.4,1) both}
+  @keyframes bubbleGrow{
+    0%  {transform:translate(-50%,-100%) scale(0);opacity:0}
+    55% {transform:translate(-50%,-100%) scale(1.07);opacity:1}
+    100%{transform:translate(-50%,-100%) scale(1);opacity:1}
+  }
+  #bubble::after{
+    content:"";position:absolute;left:50%;bottom:-14px;transform:translateX(-50%);
+    border:14px solid transparent;border-top-color:var(--card);border-bottom:0;
+  }
+  #bubble .b-label{
+    font-size:10px;font-weight:800;color:#7BA2B5;letter-spacing:.08em;
+    display:flex;align-items:center;gap:5px;margin-bottom:6px;
+  }
+  #bubble .b-item{
+    background:#F1F8FB;border-radius:12px;padding:10px 12px;
+    font-size:13px;font-weight:700;display:flex;gap:8px;align-items:flex-start;
+    word-break:break-word;
+  }
+  #bubble .b-item .ic{flex:0 0 auto;margin-top:2px;color:#4E93AC}
+  #bubble .b-meta{font-size:11px;color:#8FB2C2;font-weight:700;margin-top:8px}
+  #bubble .b-actions{display:flex;gap:8px;margin-top:10px}
+  #bubble .b-actions button{
+    flex:1;border:none;cursor:pointer;border-radius:12px;padding:10px 0;
+    font-family:inherit;font-weight:900;font-size:13px;
+    transition:transform .12s, box-shadow .12s;
+  }
+  #bubble .edit{background:var(--pin);color:#fff;box-shadow:0 5px 0 var(--pin-dark)}
+  #bubble .edit:active{transform:translateY(3px);box-shadow:0 2px 0 var(--pin-dark)}
+  #bubble .cancel{background:#EAF2F6;color:#5E8AA0;box-shadow:0 5px 0 #C9DCE6}
+  #bubble .cancel:active{transform:translateY(3px);box-shadow:0 2px 0 #C9DCE6}
+
+  /* ---------- 編集パネル ---------- */
+  #panel{
+    position:fixed;top:0;right:0;bottom:0;z-index:30;
+    width:min(400px,100vw);background:#F7FBFC;
+    box-shadow:-14px 0 40px rgba(10,60,80,.25);
+    transform:translateX(105%);
+    transition:transform .32s cubic-bezier(.32,1,.35,1);
+    display:flex;flex-direction:column;border-radius:26px 0 0 26px;
+  }
+  #panel.open{transform:translateX(0)}
+  #panelHead{padding:20px 20px 14px;border-radius:26px 0 0 0;color:#fff;position:relative}
+  #panelHead .region{display:inline-block;font-size:11px;font-weight:700;background:rgba(255,255,255,.28);border-radius:999px;padding:3px 12px;margin-bottom:6px}
+  #panelHead h2{font-size:30px;font-weight:900;line-height:1.1;text-shadow:0 2px 0 rgba(0,0,0,.12)}
+  #panelHead .en{font-family:"Baloo 2";font-size:12px;font-weight:800;letter-spacing:.14em;opacity:.85;text-transform:uppercase}
+  #closeBtn{
+    position:absolute;top:14px;right:14px;width:34px;height:34px;border-radius:50%;
+    border:none;cursor:pointer;font-size:15px;
+    background:rgba(255,255,255,.9);color:var(--ink);
+    box-shadow:0 3px 0 rgba(0,0,0,.15);display:grid;place-items:center;
+  }
+  #panelBody{flex:1;overflow-y:auto;padding:16px 16px 28px;overscroll-behavior:contain;touch-action:pan-y}
+  .sec{margin-bottom:20px}
+  .sec-h{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+  .sec-h .badge{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;color:#fff;font-size:14px}
+  .sec-h h3{font-size:15px;font-weight:900}
+  .sec-h .count{font-size:11px;color:#7BA2B5;font-weight:700;margin-left:auto}
+
+  .card{
+    background:var(--card);border-radius:var(--radius);
+    box-shadow:0 6px 0 rgba(23,90,108,.12);
+    padding:10px 12px;margin-bottom:8px;
+    display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  }
+  .card input[type=text]{
+    border:none;background:transparent;outline:none;
+    font-family:inherit;font-size:13px;font-weight:700;color:var(--ink);
+    flex:1;min-width:60px;
+  }
+  .card input.k{flex:0 0 34%;color:#5E8AA0}
+  .card input:focus{background:#EAF6FA;border-radius:8px}
+  .fsel{
+    border:none;background:#EFF6F9;color:#4E93AC;
+    font-family:inherit;font-size:11px;font-weight:800;
+    border-radius:999px;padding:4px 8px;cursor:pointer;outline:none;
+    max-width:96px;
+  }
+  .icon-btn{
+    flex:0 0 auto;border:none;cursor:pointer;
+    width:28px;height:28px;border-radius:9px;
+    display:grid;place-items:center;font-size:14px;
+    background:#EFF6F9;color:#8AA9BA;
+    transition:background .15s,color .15s;
+  }
+  .icon-btn:hover{background:#FDE4E4;color:var(--danger)}
+  .add-btn{
+    width:100%;border:2px dashed #A9D6E4;background:transparent;
+    border-radius:var(--radius);padding:10px;cursor:pointer;
+    font-family:inherit;font-weight:800;font-size:13px;color:#4E93AC;
+    transition:background .15s;
+  }
+  .add-btn:hover{background:rgba(255,255,255,.6)}
+
+  /* ---- メモリスト行(1行目プレビュー) ---- */
+  .memo-row{cursor:pointer;transition:transform .12s}
+  .memo-row:active{transform:translateY(2px)}
+  .memo-row .m-ic{
+    flex:0 0 auto;width:28px;height:28px;border-radius:9px;
+    background:#FFF1E5;color:var(--pin);
+    display:grid;place-items:center;font-size:13px;
+  }
+  .memo-row .prev{flex:1;min-width:0;font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .memo-row .f-chip{flex:0 0 auto;font-size:10px;font-weight:800;color:#5E8AA0;background:#EAF2F6;border-radius:999px;padding:3px 9px;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .memo-row .chev{flex:0 0 auto;color:#B7CFDB;font-size:13px}
+
+  /* ---- メモ専用ビュー(閲覧⇄編集) ---- */
+  #memoView{flex:1;overflow-y:auto;padding:16px 16px 28px;overscroll-behavior:contain;touch-action:pan-y;display:none}
+  #memoView.show{display:block}
+  #panelBody.hidden{display:none}
+  .mv-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+  .mv-tools{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+  .mv-label{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:900;color:var(--pin)}
+  .paper{
+    position:relative;background:var(--card);border-radius:var(--radius);
+    box-shadow:0 6px 0 rgba(23,90,108,.12);
+    padding:16px;min-height:200px;cursor:pointer;
+  }
+  #memoRead{white-space:pre-wrap;word-break:break-word;font-size:14px;font-weight:700;line-height:1.8;color:var(--ink)}
+  #memoTa{
+    display:none;width:100%;min-height:220px;border:none;outline:none;
+    background:#EAF6FA;border-radius:12px;padding:12px;
+    font-family:inherit;font-size:14px;font-weight:700;line-height:1.8;color:var(--ink);
+    resize:vertical;
+  }
+  .paper .hint{
+    position:absolute;right:12px;bottom:10px;font-size:10px;font-weight:800;color:#B7CFDB;
+    pointer-events:none;
+  }
+  .paper.editing{cursor:auto}
+  .paper.editing #memoRead{display:none}
+  .paper.editing #memoTa{display:block}
+  .paper.editing .hint{display:none}
+  #memoDone{
+    display:none;width:100%;margin-top:12px;border:none;cursor:pointer;
+    border-radius:var(--radius);padding:13px;
+    background:var(--pin);color:#fff;font-family:inherit;font-size:15px;font-weight:900;
+    box-shadow:0 6px 0 var(--pin-dark);
+    align-items:center;justify-content:center;gap:8px;
+    transition:transform .12s, box-shadow .12s;
+  }
+  #memoDone.show{display:flex}
+  #memoDone:active{transform:translateY(4px);box-shadow:0 2px 0 var(--pin-dark)}
+  .memo-add{display:flex;gap:8px}
+  .memo-add input{
+    flex:1;border:none;border-radius:var(--radius);
+    background:var(--card);box-shadow:0 6px 0 rgba(23,90,108,.12);
+    padding:12px 14px;font-family:inherit;font-size:13px;font-weight:700;
+    color:var(--ink);outline:none;min-width:0;
+  }
+  .memo-add button{
+    border:none;cursor:pointer;border-radius:var(--radius);
+    background:var(--pin);color:#fff;font-size:18px;
+    width:46px;box-shadow:0 6px 0 var(--pin-dark);
+    display:grid;place-items:center;
+    transition:transform .12s, box-shadow .12s;
+  }
+  .memo-add button:active{transform:translateY(4px);box-shadow:0 2px 0 var(--pin-dark)}
+  .empty{text-align:center;color:#8FB2C2;font-size:12px;font-weight:700;padding:14px 8px}
+
+  /* ---------- モーダル(設定 / フォルダ) ---------- */
+  .overlay{
+    position:fixed;inset:0;z-index:40;background:rgba(15,70,90,.45);
+    display:none;align-items:center;justify-content:center;padding:20px;
+  }
+  .overlay.open{display:flex}
+  .modal{
+    width:min(380px,94vw);max-height:82vh;
+    background:#F7FBFC;border-radius:24px;
+    box-shadow:0 14px 0 rgba(10,50,70,.3);
+    display:flex;flex-direction:column;overflow:hidden;
+    animation:pop .28s cubic-bezier(.34,1.6,.5,1);
+  }
+  .modal-h{
+    padding:16px 18px;display:flex;align-items:center;gap:10px;
+    background:var(--card);border-bottom:2px solid #E4EFF4;
+  }
+  .modal-h .badge{width:30px;height:30px;border-radius:10px;display:grid;place-items:center;color:#fff;font-size:15px}
+  .modal-h h3{font-size:16px;font-weight:900;flex:1}
+  .modal-h .x{border:none;background:#EFF6F9;color:#5E8AA0;width:30px;height:30px;border-radius:50%;cursor:pointer;display:grid;place-items:center;font-size:13px}
+  .modal-b{padding:14px 16px 20px;overflow-y:auto}
+  .m-item{
+    width:100%;text-align:left;border:none;cursor:pointer;
+    background:var(--card);border-radius:var(--radius);
+    box-shadow:0 5px 0 rgba(23,90,108,.12);
+    padding:13px 14px;margin-bottom:8px;
+    display:flex;align-items:center;gap:10px;
+    font-family:inherit;font-size:14px;font-weight:800;color:var(--ink);
+    transition:transform .12s;
+  }
+  .m-item:active{transform:translateY(3px)}
+  .m-item .ic{color:#4E93AC;font-size:16px}
+  .m-item .sub{font-size:11px;color:#8FB2C2;font-weight:700;margin-left:auto}
+  .m-note{font-size:11px;color:#7BA2B5;font-weight:700;line-height:1.7;margin-top:10px}
+
+  .fold-row{display:flex;align-items:center;gap:8px;background:var(--card);border-radius:var(--radius);box-shadow:0 6px 0 rgba(23,90,108,.12);padding:9px 10px 9px 15px;margin-bottom:8px}
+  .fold-row .open-f{flex:1;text-align:left;border:none;background:none;cursor:pointer;font-family:inherit;font-size:14px;font-weight:800;color:var(--ink);padding:8px 0;display:flex;align-items:center;gap:10px}
+  .fold-row .open-f .ic{color:var(--accent);font-size:19px}
+  .fold-row .cnt{font-size:11px;color:#8FB2C2;font-weight:700}
+  .back-btn{border:none;background:#EAF2F6;color:#4E93AC;border-radius:999px;padding:7px 16px;font-family:inherit;font-weight:800;font-size:12px;cursor:pointer;margin-bottom:12px;display:inline-flex;align-items:center;gap:6px}
+  .f-item{cursor:pointer}
+  .f-item .pref-tag{font-size:10px;font-weight:800;color:#fff;border-radius:999px;padding:3px 9px;flex:0 0 auto}
+  .f-item .txt{flex:1;font-size:13px;font-weight:700;word-break:break-word}
+
+  /* ---------- toast & notice ---------- */
+  #toast{
+    position:fixed;left:50%;bottom:70px;transform:translate(-50%,20px);
+    z-index:60;background:var(--ink);color:#fff;
+    padding:10px 20px;border-radius:999px;font-size:13px;font-weight:700;
+    opacity:0;pointer-events:none;transition:all .3s;
+  }
+  #toast.show{opacity:1;transform:translate(-50%,0)}
+  #storageNotice{
+    position:fixed;top:76px;left:50%;transform:translateX(-50%);
+    z-index:25;background:var(--accent);color:#6B4A00;
+    padding:8px 18px;border-radius:999px;font-size:11px;font-weight:800;
+    box-shadow:0 5px 0 rgba(0,0,0,.15);display:none;max-width:92vw;text-align:center;
+  }
+
+  }
+  @media (prefers-reduced-motion: reduce){
+    .pin-drop{animation:none}
+    .wave{animation:none}
+    #bubble.grow{animation:none;opacity:1}
+    .tile .body,#panel{transition:none}
+  }
+  @media (max-width:640px){
+    header{padding:10px}
+    header h1{font-size:15px}
+    #prefBadge{top:10px;left:10px;padding:8px 18px 8px 13px}
+    #prefBadge .nm{font-size:18px}
+    #legend{display:none}
+    #panel{top:auto;left:0;width:100vw;height:74vh;border-radius:26px 26px 0 0;transform:translateY(105%)}
+    #panel.open{transform:translateY(0)}
+    #panelHead{border-radius:26px 26px 0 0}
+  }
+  :focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+</style>
+</head>
+<body>
+
+<!-- ===== SVGアイコン定義(オリジナル) ===== -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 2C7.9 2 4.5 5.4 4.5 9.5c0 5.6 6.6 11.8 6.9 12.1.3.3.9.3 1.2 0 .3-.3 6.9-6.5 6.9-12.1C19.5 5.4 16.1 2 12 2zm0 10.2a2.7 2.7 0 1 1 0-5.4 2.7 2.7 0 0 1 0 5.4z"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24"><path d="M19.4 13c.04-.33.06-.66.06-1s-.02-.67-.06-1l2.1-1.6c.2-.15.25-.42.13-.64l-2-3.4a.5.5 0 0 0-.6-.22l-2.5 1a7.6 7.6 0 0 0-1.7-1L14.5 2.5a.5.5 0 0 0-.5-.4h-4a.5.5 0 0 0-.5.4l-.37 2.64c-.6.26-1.18.6-1.7 1l-2.5-1a.5.5 0 0 0-.6.22l-2 3.4c-.12.22-.07.5.13.64L4.6 11c-.04.33-.06.66-.06 1s.02.67.06 1l-2.1 1.6a.5.5 0 0 0-.13.64l2 3.4c.12.22.38.3.6.22l2.5-1c.52.4 1.1.74 1.7 1l.37 2.64c.04.23.25.4.5.4h4c.25 0 .46-.17.5-.4l.37-2.64c.6-.26 1.18-.6 1.7-1l2.5 1c.22.08.48 0 .6-.22l2-3.4a.5.5 0 0 0-.13-.64L19.4 13zM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M4 4h5l2 2.5h9a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/></symbol>
+    <symbol id="i-export" viewBox="0 0 24 24"><path d="M12 3l4.5 4.5-1.4 1.4L13 6.8V15h-2V6.8L8.9 8.9 7.5 7.5 12 3zM5 14v5h14v-5h2v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-5h2z"/></symbol>
+    <symbol id="i-import" viewBox="0 0 24 24"><path d="M12 15l-4.5-4.5 1.4-1.4L11 11.2V3h2v8.2l2.1-2.1 1.4 1.4L12 15zM5 14v5h14v-5h2v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-5h2z"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M9 3h6l1 2h4v2H4V5h4l1-2zM6 8h12l-.9 12.1a2 2 0 0 1-2 1.9H8.9a2 2 0 0 1-2-1.9L6 8zm4 3v7h1.5v-7H10zm2.5 0v7H14v-7h-1.5z"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M11 4h2v7h7v2h-7v7h-2v-7H4v-2h7V4z"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M9.5 16.2L5.3 12l-1.4 1.4 5.6 5.6 12-12L20.1 5.6 9.5 16.2z" stroke="currentColor" stroke-width="1.5"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M6.4 5L12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4 6.4 5z"/></symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20V10h4v10H4zm6 0V4h4v16h-4zm6 0v-7h4v7h-4z"/></symbol>
+    <symbol id="i-note" viewBox="0 0 24 24"><path d="M5 3h14a1 1 0 0 1 1 1v12l-5 5H5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zm9 16.5L18.5 15H14v4.5zM7 8h10v2H7V8zm0 4h7v2H7v-2z"/></symbol>
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="M12 3l9 8h-3v9h-5v-6h-2v6H6v-9H3l9-8z"/></symbol>
+    <symbol id="i-compass" viewBox="0 0 24 24"><path d="M12 2l3 8h-6l3-8z" fill="#F26D6D"/><path d="M12 22l-3-8h6l-3 8z" fill="#8AA9BA"/></symbol>
+    <symbol id="i-rot-l" viewBox="0 0 24 24"><path d="M12 5V1L6.5 6 12 11V7a6 6 0 1 1-6 6H4a8 8 0 1 0 8-8z"/></symbol>
+    <symbol id="i-rot-r" viewBox="0 0 24 24"><path d="M12 5V1l5.5 5L12 11V7a6 6 0 1 0 6 6h2a8 8 0 1 1-8-8z"/></symbol>
+    <symbol id="i-zoom-in" viewBox="0 0 24 24"><path d="M10 2a8 8 0 1 0 4.9 14.3l5.4 5.4 1.4-1.4-5.4-5.4A8 8 0 0 0 10 2zm0 2a6 6 0 1 1 0 12 6 6 0 0 1 0-12zm-1 2.5h2V9h2.5v2H11v2.5H9V11H6.5V9H9V6.5z"/></symbol>
+    <symbol id="i-zoom-out" viewBox="0 0 24 24"><path d="M10 2a8 8 0 1 0 4.9 14.3l5.4 5.4 1.4-1.4-5.4-5.4A8 8 0 0 0 10 2zm0 2a6 6 0 1 1 0 12 6 6 0 0 1 0-12zM6.5 9h7v2h-7V9z"/></symbol>
+    <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 16.7V20h3.3L17 10.3 13.7 7 4 16.7zM19.7 7.6a1 1 0 0 0 0-1.4l-1.9-1.9a1 1 0 0 0-1.4 0l-1.6 1.6 3.3 3.3 1.6-1.6z"/></symbol>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="M14.6 5.4L13.2 4 5.2 12l8 8 1.4-1.4L8 12l6.6-6.6z"/></symbol>
+    <symbol id="i-danger" viewBox="0 0 24 24"><path d="M12 2L1 21h22L12 2zm-1 7h2v6h-2V9zm0 8h2v2h-2v-2z"/></symbol>
+  </defs>
+</svg>
+
+<header>
+  <div class="title">
+    <div class="logo"><svg class="ic"><use href="#i-pin"/></svg></div>
+    <h1>にっぽんマップメモ<small>Japan Map Memo</small></h1>
+  </div>
+</header>
+
+<div id="prefBadge">
+  <span class="dot"></span>
+  <div><div class="nm"></div><div class="rg"></div></div>
+</div>
+
+<div id="storageNotice">この環境では自動保存できません。設定の「書き出し」でデータを保存してください(GitHub Pages上では自動保存されます)</div>
+
+<div id="stage"></div>
+<div id="legend"></div>
+
+<!-- 右下コントロール -->
+<div id="controls">
+  <div class="group">
+    <button class="cbtn" id="zoomIn" aria-label="拡大"><svg class="ic"><use href="#i-zoom-in"/></svg></button>
+    <button class="cbtn" id="zoomOut" aria-label="縮小"><svg class="ic"><use href="#i-zoom-out"/></svg></button>
+    <button class="cbtn" id="rotL" aria-label="左に回転"><svg class="ic"><use href="#i-rot-l"/></svg></button>
+    <button class="cbtn" id="rotR" aria-label="右に回転"><svg class="ic"><use href="#i-rot-r"/></svg></button>
+    <button class="cbtn" id="homeBtn" aria-label="位置をリセット" title="位置をリセット"><svg class="ic needle"><use href="#i-compass"/></svg></button>
+  </div>
+  <button class="cbtn big" id="folderBtn" aria-label="フォルダ"><svg class="ic" style="color:var(--accent)"><use href="#i-folder"/></svg></button>
+  <button class="cbtn big" id="settingsBtn" aria-label="設定"><svg class="ic"><use href="#i-gear"/></svg></button>
+</div>
+
+<!-- 吹き出しプレビュー -->
+<div id="bubble">
+  <div class="b-label"><svg class="ic"><use href="#i-pin"/></svg>いちばん新しい記録</div>
+  <div class="b-item" id="bItem"></div>
+  <div class="b-meta" id="bMeta"></div>
+  <div class="b-actions">
+    <button class="cancel" id="bCancel">閉じる</button>
+    <button class="edit" id="bEdit"><svg class="ic"><use href="#i-edit"/></svg> 編集する</button>
+  </div>
+</div>
+
+<!-- 編集パネル -->
+<aside id="panel" aria-hidden="true">
+  <div id="panelHead">
+    <span class="region" id="pRegion"></span>
+    <h2 id="pName"></h2>
+    <div class="en" id="pEn"></div>
+    <button id="closeBtn" aria-label="閉じる"><svg class="ic"><use href="#i-close"/></svg></button>
+  </div>
+  <div id="panelBody">
+    <div class="sec">
+      <div class="sec-h">
+        <span class="badge" style="background:#3E9BE8"><svg class="ic"><use href="#i-chart"/></svg></span>
+        <h3>データ</h3>
+        <span class="count" id="statCount"></span>
+      </div>
+      <div id="statList"></div>
+      <button class="add-btn" id="addStat">＋ データを追加</button>
+    </div>
+    <div class="sec">
+      <div class="sec-h">
+        <span class="badge" style="background:var(--pin)"><svg class="ic"><use href="#i-note"/></svg></span>
+        <h3>メモ</h3>
+        <span class="count" id="memoCount"></span>
+      </div>
+      <div id="memoList"></div>
+      <div class="memo-add">
+        <input type="text" id="memoInput" placeholder="メモを書く…(例: ラーメン食べに行く)" maxlength="200">
+        <button id="memoAdd" aria-label="メモを追加"><svg class="ic"><use href="#i-plus"/></svg></button>
+      </div>
+    </div>
+  </div>
+  <!-- メモ専用ビュー(閲覧⇄編集) -->
+  <div id="memoView">
+    <div class="mv-top">
+      <button class="back-btn" id="memoBack"><svg class="ic"><use href="#i-back"/></svg> データ一覧へ</button>
+      <button class="icon-btn" id="memoDel" aria-label="このメモを削除"><svg class="ic"><use href="#i-trash"/></svg></button>
+    </div>
+    <div class="mv-tools">
+      <span class="mv-label"><svg class="ic"><use href="#i-note"/></svg> メモ</span>
+      <span id="memoFolderSlot"></span>
+    </div>
+    <div class="paper" id="memoPaper" role="button" aria-label="タップして編集">
+      <div id="memoRead"></div>
+      <textarea id="memoTa" maxlength="2000"></textarea>
+      <div class="hint" id="memoHint">タップして編集</div>
+    </div>
+    <button id="memoDone"><svg class="ic"><use href="#i-check"/></svg> 完了</button>
+  </div>
+</aside>
+
+<!-- 設定モーダル -->
+<div class="overlay" id="settingsOverlay">
+  <div class="modal" role="dialog" aria-label="設定">
+    <div class="modal-h">
+      <span class="badge" style="background:var(--pin)"><svg class="ic"><use href="#i-gear"/></svg></span>
+      <h3>設定</h3>
+      <button class="x" data-close="settingsOverlay"><svg class="ic"><use href="#i-close"/></svg></button>
+    </div>
+    <div class="modal-b">
+      <button class="m-item" id="exportBtn"><svg class="ic"><use href="#i-export"/></svg>データを書き出し<span class="sub">JSON</span></button>
+      <button class="m-item" id="importBtn"><svg class="ic"><use href="#i-import"/></svg>データを読み込み<span class="sub">JSON</span></button>
+      <button class="m-item" id="resetBtn" style="color:var(--danger)"><svg class="ic" style="color:var(--danger)"><use href="#i-danger"/></svg>すべてのデータを初期化</button>
+      <p class="m-note">GitHub Pages などのWebサイト上では、データは端末(localStorage)に自動保存されます。別の端末に移すときは「書き出し」→「読み込み」を使ってください。</p>
+    </div>
+  </div>
+</div>
+<input type="file" id="importFile" accept="application/json" hidden>
+
+<!-- フォルダモーダル -->
+<div class="overlay" id="folderOverlay">
+  <div class="modal" role="dialog" aria-label="フォルダ">
+    <div class="modal-h">
+      <span class="badge" style="background:var(--accent);color:#6B4A00"><svg class="ic"><use href="#i-folder"/></svg></span>
+      <h3 id="folderTitle">フォルダ</h3>
+      <button class="x" data-close="folderOverlay"><svg class="ic"><use href="#i-close"/></svg></button>
+    </div>
+    <div class="modal-b" id="folderBody"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* ============================================================
+   47都道府県データ
+============================================================ */
+const REGIONS = {
+  hokkaido:{name:"北海道", color:"#A8CE3B"},
+  tohoku:  {name:"東北",   color:"#4EC974"},
+  kanto:   {name:"関東",   color:"#2FBFAE"},
+  chubu:   {name:"中部",   color:"#3E9BE8"},
+  kinki:   {name:"近畿",   color:"#7B6CF6"},
+  chugoku: {name:"中国",   color:"#E0559E"},
+  shikoku: {name:"四国",   color:"#F26D6D"},
+  kyushu:  {name:"九州・沖縄", color:"#F5952F"}
+};
+const PREFS = [
+ {id:"hokkaido", name:"北海道", en:"Hokkaido", r:"hokkaido", x:15,y:0,  cap:"札幌市", pop:"約514万人", area:"83,424km²"},
+ {id:"aomori",   name:"青森",   en:"Aomori",   r:"tohoku",   x:15,y:2,  cap:"青森市", pop:"約120万人", area:"9,646km²"},
+ {id:"akita",    name:"秋田",   en:"Akita",    r:"tohoku",   x:14,y:3,  cap:"秋田市", pop:"約93万人",  area:"11,638km²"},
+ {id:"iwate",    name:"岩手",   en:"Iwate",    r:"tohoku",   x:15,y:3,  cap:"盛岡市", pop:"約118万人", area:"15,275km²"},
+ {id:"yamagata", name:"山形",   en:"Yamagata", r:"tohoku",   x:14,y:4,  cap:"山形市", pop:"約104万人", area:"9,323km²"},
+ {id:"miyagi",   name:"宮城",   en:"Miyagi",   r:"tohoku",   x:15,y:4,  cap:"仙台市", pop:"約228万人", area:"7,282km²"},
+ {id:"niigata",  name:"新潟",   en:"Niigata",  r:"chubu",    x:13,y:5,  cap:"新潟市", pop:"約215万人", area:"12,584km²"},
+ {id:"fukushima",name:"福島",   en:"Fukushima",r:"tohoku",   x:15,y:5,  cap:"福島市", pop:"約179万人", area:"13,784km²"},
+ {id:"ishikawa", name:"石川",   en:"Ishikawa", r:"chubu",    x:10,y:6,  cap:"金沢市", pop:"約111万人", area:"4,186km²"},
+ {id:"toyama",   name:"富山",   en:"Toyama",   r:"chubu",    x:11,y:6,  cap:"富山市", pop:"約101万人", area:"4,248km²"},
+ {id:"nagano",   name:"長野",   en:"Nagano",   r:"chubu",    x:12,y:6,  cap:"長野市", pop:"約202万人", area:"13,562km²"},
+ {id:"gunma",    name:"群馬",   en:"Gunma",    r:"kanto",    x:13,y:6,  cap:"前橋市", pop:"約191万人", area:"6,362km²"},
+ {id:"tochigi",  name:"栃木",   en:"Tochigi",  r:"kanto",    x:14,y:6,  cap:"宇都宮市",pop:"約191万人", area:"6,408km²"},
+ {id:"ibaraki",  name:"茨城",   en:"Ibaraki",  r:"kanto",    x:15,y:6,  cap:"水戸市", pop:"約284万人", area:"6,097km²"},
+ {id:"fukui",    name:"福井",   en:"Fukui",    r:"chubu",    x:10,y:7,  cap:"福井市", pop:"約75万人",  area:"4,190km²"},
+ {id:"gifu",     name:"岐阜",   en:"Gifu",     r:"chubu",    x:11,y:7,  cap:"岐阜市", pop:"約193万人", area:"10,621km²"},
+ {id:"yamanashi",name:"山梨",   en:"Yamanashi",r:"chubu",    x:12,y:7,  cap:"甲府市", pop:"約80万人",  area:"4,465km²"},
+ {id:"saitama",  name:"埼玉",   en:"Saitama",  r:"kanto",    x:13,y:7,  cap:"さいたま市",pop:"約734万人",area:"3,798km²"},
+ {id:"kyoto",    name:"京都",   en:"Kyoto",    r:"kinki",    x:8, y:7,  cap:"京都市", pop:"約254万人", area:"4,612km²"},
+ {id:"shiga",    name:"滋賀",   en:"Shiga",    r:"kinki",    x:9, y:7,  cap:"大津市", pop:"約141万人", area:"4,017km²"},
+ {id:"shimane",  name:"島根",   en:"Shimane",  r:"chugoku",  x:5, y:7,  cap:"松江市", pop:"約65万人",  area:"6,708km²"},
+ {id:"tottori",  name:"鳥取",   en:"Tottori",  r:"chugoku",  x:6, y:7,  cap:"鳥取市", pop:"約54万人",  area:"3,507km²"},
+ {id:"hyogo",    name:"兵庫",   en:"Hyogo",    r:"kinki",    x:7, y:8,  cap:"神戸市", pop:"約540万人", area:"8,401km²"},
+ {id:"osaka",    name:"大阪",   en:"Osaka",    r:"kinki",    x:8, y:8,  cap:"大阪市", pop:"約878万人", area:"1,905km²"},
+ {id:"nara",     name:"奈良",   en:"Nara",     r:"kinki",    x:9, y:8,  cap:"奈良市", pop:"約130万人", area:"3,691km²"},
+ {id:"mie",      name:"三重",   en:"Mie",      r:"kinki",    x:10,y:8,  cap:"津市",   pop:"約174万人", area:"5,774km²"},
+ {id:"aichi",    name:"愛知",   en:"Aichi",    r:"chubu",    x:11,y:8,  cap:"名古屋市",pop:"約750万人", area:"5,173km²"},
+ {id:"shizuoka", name:"静岡",   en:"Shizuoka", r:"chubu",    x:12,y:8,  cap:"静岡市", pop:"約358万人", area:"7,777km²"},
+ {id:"tokyo",    name:"東京",   en:"Tokyo",    r:"kanto",    x:13,y:8,  cap:"新宿区",  pop:"約1,404万人",area:"2,194km²"},
+ {id:"chiba",    name:"千葉",   en:"Chiba",    r:"kanto",    x:14,y:8,  cap:"千葉市", pop:"約627万人", area:"5,157km²"},
+ {id:"yamaguchi",name:"山口",   en:"Yamaguchi",r:"chugoku",  x:4, y:8,  cap:"山口市", pop:"約131万人", area:"6,113km²"},
+ {id:"hiroshima",name:"広島",   en:"Hiroshima",r:"chugoku",  x:5, y:8,  cap:"広島市", pop:"約275万人", area:"8,479km²"},
+ {id:"okayama",  name:"岡山",   en:"Okayama",  r:"chugoku",  x:6, y:8,  cap:"岡山市", pop:"約186万人", area:"7,114km²"},
+ {id:"wakayama", name:"和歌山", en:"Wakayama", r:"kinki",    x:8, y:9,  cap:"和歌山市",pop:"約90万人",  area:"4,725km²"},
+ {id:"kanagawa", name:"神奈川", en:"Kanagawa", r:"kanto",    x:13,y:9,  cap:"横浜市", pop:"約923万人", area:"2,416km²"},
+ {id:"ehime",    name:"愛媛",   en:"Ehime",    r:"shikoku",  x:5, y:9,  cap:"松山市", pop:"約130万人", area:"5,676km²"},
+ {id:"kagawa",   name:"香川",   en:"Kagawa",   r:"shikoku",  x:6, y:9,  cap:"高松市", pop:"約93万人",  area:"1,877km²"},
+ {id:"tokushima",name:"徳島",   en:"Tokushima",r:"shikoku",  x:7, y:9,  cap:"徳島市", pop:"約70万人",  area:"4,147km²"},
+ {id:"kochi",    name:"高知",   en:"Kochi",    r:"shikoku",  x:6, y:10, cap:"高知市", pop:"約67万人",  area:"7,104km²"},
+ {id:"nagasaki", name:"長崎",   en:"Nagasaki", r:"kyushu",   x:1, y:9,  cap:"長崎市", pop:"約127万人", area:"4,131km²"},
+ {id:"saga",     name:"佐賀",   en:"Saga",     r:"kyushu",   x:2, y:9,  cap:"佐賀市", pop:"約80万人",  area:"2,441km²"},
+ {id:"fukuoka",  name:"福岡",   en:"Fukuoka",  r:"kyushu",   x:3, y:9,  cap:"福岡市", pop:"約512万人", area:"4,987km²"},
+ {id:"oita",     name:"大分",   en:"Oita",     r:"kyushu",   x:4, y:9,  cap:"大分市", pop:"約110万人", area:"6,341km²"},
+ {id:"kumamoto", name:"熊本",   en:"Kumamoto", r:"kyushu",   x:3, y:10, cap:"熊本市", pop:"約171万人", area:"7,409km²"},
+ {id:"miyazaki", name:"宮崎",   en:"Miyazaki", r:"kyushu",   x:4, y:10, cap:"宮崎市", pop:"約105万人", area:"7,735km²"},
+ {id:"kagoshima",name:"鹿児島", en:"Kagoshima",r:"kyushu",   x:3, y:11, cap:"鹿児島市",pop:"約156万人", area:"9,186km²"},
+ {id:"okinawa",  name:"沖縄",   en:"Okinawa",  r:"kyushu",   x:1, y:13, cap:"那覇市", pop:"約147万人", area:"2,282km²"},
+];
+const PREF_BY_ID = Object.fromEntries(PREFS.map(p=>[p.id,p]));
+
+/* ============================================================
+   永続化(localStorage / フォールバック)
+============================================================ */
+const KEY = "japan-map-memo-v2";
+const OLD_KEY = "japan-map-memo-v1";
+const store = (() => {
+  try {
+    localStorage.setItem("__t","1"); localStorage.removeItem("__t");
+    return localStorage;
+  } catch(e) {
+    document.getElementById("storageNotice").style.display = "block";
+    const mem = {};
+    return { getItem:k=>mem[k]??null, setItem:(k,v)=>{mem[k]=v}, removeItem:k=>{delete mem[k]} };
+  }
+})();
+
+function freshDB(){
+  return { folders:[{id:"f-food", name:"食べ物"},{id:"f-spot", name:"行きたい場所"}], prefs:{} };
+}
+let db;
+try {
+  db = JSON.parse(store.getItem(KEY));
+  if(!db){
+    // v1からの移行
+    const old = JSON.parse(store.getItem(OLD_KEY));
+    db = freshDB();
+    if(old){
+      for(const [id,e] of Object.entries(old)){
+        db.prefs[id] = {
+          stats:(e.stats||[]).map(s=>({...s, folder:"", t:0})),
+          memos:(e.memos||[]).map(m=>({...m, folder:"", t:m.id||0}))
+        };
+      }
+    }
+  }
+} catch(e){ db = freshDB(); }
+if(!db.folders) db.folders = [];
+if(!db.prefs) db.prefs = {};
+
+function entry(id){
+  if(!db.prefs[id]){
+    const p = PREF_BY_ID[id];
+    db.prefs[id] = {
+      stats:[
+        {k:"県庁所在地", v:p.cap, folder:"", t:1},
+        {k:"人口", v:p.pop, folder:"", t:2},
+        {k:"面積", v:p.area, folder:"", t:3},
+      ],
+      memos:[]
+    };
+  }
+  return db.prefs[id];
+}
+function save(){ store.setItem(KEY, JSON.stringify(db)); }
+
+/* ============================================================
+   アイソメ描画(回転対応)
+============================================================ */
+const TW = 78, TH = 45, DEPTH = 20, HALF = 0.46;
+let rot = 0; // ラジアン
+const GCX = PREFS.reduce((s,p)=>s+p.x,0)/PREFS.length;
+const GCY = PREFS.reduce((s,p)=>s+p.y,0)/PREFS.length;
+
+function proj(gx, gy){
+  const dx = gx-GCX, dy = gy-GCY;
+  const xr = dx*Math.cos(rot) - dy*Math.sin(rot);
+  const yr = dx*Math.sin(rot) + dy*Math.cos(rot);
+  return { sx:(xr-yr)*TW/2, sy:(xr+yr)*TH/2, depth:xr+yr };
+}
+
+const SVGNS = "http://www.w3.org/2000/svg";
+const stage = document.getElementById("stage");
+const svg = document.createElementNS(SVGNS,"svg");
+stage.appendChild(svg);
+
+/* ===== 波マーク: グリッド(ワールド)座標に固定して置く =====
+   タイルと同じ proj() で毎回投影するので、回転・拡大・パンに
+   完全追従する。64個の小さな曲線だけなので描画コストは極小。 */
+const waveLayer = document.createElementNS(SVGNS,"g");
+svg.appendChild(waveLayer);
+const WAVES = [];
+{
+  let seed = 11;
+  const rnd = ()=>{ seed=(seed*16807)%2147483647; return seed/2147483647; };
+  for(let i=0;i<64;i++){
+    // 投影後の画面方向に均等になるよう (u,v)=(gx-gy, gx+gy) 空間でサンプル
+    // (地図の中心=投影原点を基準に散らす)
+    const u = (GCX-GCY) + (-36 + 72*rnd());
+    const v = (GCX+GCY) + (-62 + 124*rnd());
+    const gx=(u+v)/2, gy=(v-u)/2;
+    const sc = 0.7 + rnd()*0.8;
+    const holder = document.createElementNS(SVGNS,"g");
+    const g = document.createElementNS(SVGNS,"g");
+    g.setAttribute("class","wave w"+(i%3));
+    g.setAttribute("style",`animation-delay:${(-rnd()*9).toFixed(2)}s`);
+    g.innerHTML = `<path d="M-14 0 q7 -7 14 0 q7 7 14 0" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round"/>`;
+    holder.appendChild(g);
+    waveLayer.appendChild(holder);
+    WAVES.push({gx,gy,sc,holder});
+  }
+}
+function positionWaveMarks(){
+  WAVES.forEach(w=>{
+    const p = proj(w.gx, w.gy);
+    w.holder.setAttribute("transform", `translate(${p.sx.toFixed(1)} ${p.sy.toFixed(1)}) scale(${w.sc})`);
+  });
+}
+
+const tileLayer = document.createElementNS(SVGNS,"g");
+/* 列島全体でひとつながりになる影レイヤー(タイルの下) */
+const shadowLayer = document.createElementNS(SVGNS,"g");
+shadowLayer.setAttribute("fill","#0A465A");
+shadowLayer.setAttribute("stroke","#0A465A");
+shadowLayer.setAttribute("stroke-width","12");
+shadowLayer.setAttribute("stroke-linejoin","round");
+shadowLayer.setAttribute("opacity",".18");
+svg.appendChild(shadowLayer);
+svg.appendChild(tileLayer);
+const shadowPolys = {};
+PREFS.forEach(p=>{
+  const poly=document.createElementNS(SVGNS,"polygon");
+  shadowLayer.appendChild(poly);
+  shadowPolys[p.id]=poly;
+});
+
+/* タイルDOMを一度だけ生成 */
+const tiles = {};
+PREFS.forEach(p=>{
+  const color = REGIONS[p.r].color;
+  const g = document.createElementNS(SVGNS,"g");
+  g.setAttribute("class","tile");
+  g.setAttribute("tabindex","0");
+  g.setAttribute("role","button");
+  g.setAttribute("aria-label", p.name);
+  const body = document.createElementNS(SVGNS,"g");
+  body.setAttribute("class","body");
+  const walls = [0,1,2,3].map(()=>{
+    const poly = document.createElementNS(SVGNS,"polygon");
+    body.appendChild(poly); return poly;
+  });
+  const top = document.createElementNS(SVGNS,"polygon");
+  top.setAttribute("fill", color);
+  top.setAttribute("stroke", shade(color,42));
+  top.setAttribute("stroke-width","2");
+  top.setAttribute("stroke-linejoin","round");
+  const label = document.createElementNS(SVGNS,"text");
+  label.setAttribute("text-anchor","middle");
+  label.setAttribute("font-size", p.name.length>=3?12:14);
+  label.setAttribute("fill","#fff");
+  label.setAttribute("style",`paint-order:stroke;stroke:${shade(color,-60)};stroke-width:3px`);
+  label.textContent = p.name;
+  const pinSlot = document.createElementNS(SVGNS,"g");
+  pinSlot.setAttribute("class","pin-slot");
+  body.appendChild(top); body.appendChild(label); body.appendChild(pinSlot);
+  g.appendChild(body);
+  g.addEventListener("click", e=>{ e.stopPropagation(); select(p.id); });
+  g.addEventListener("keydown", e=>{ if(e.key==="Enter"||e.key===" "){e.preventDefault();select(p.id);} });
+  tileLayer.appendChild(g);
+  tiles[p.id] = {g, walls, top, label, pinSlot, color, cx:0, cy:0, depth:0};
+});
+
+function shade(hex, amt){
+  const n = parseInt(hex.slice(1),16);
+  const r = Math.max(0,Math.min(255,(n>>16)+amt));
+  const g = Math.max(0,Math.min(255,((n>>8)&255)+amt));
+  const b = Math.max(0,Math.min(255,(n&255)+amt));
+  return "#"+((r<<16)|(g<<8)|b).toString(16).padStart(6,"0");
+}
+
+function renderMap(){
+  PREFS.forEach(p=>{
+    const t = tiles[p.id];
+    const c = proj(p.x, p.y);
+    // 上面の4隅(グリッド座標で回転してから投影)
+    const corners = [
+      proj(p.x-HALF, p.y-HALF),
+      proj(p.x+HALF, p.y-HALF),
+      proj(p.x+HALF, p.y+HALF),
+      proj(p.x-HALF, p.y+HALF),
+    ];
+    t.cx = c.sx; t.cy = c.sy; t.depth = c.depth;
+    t.top.setAttribute("points", corners.map(q=>`${q.sx},${q.sy}`).join(" "));
+    // 側面: 手前を向く辺だけ壁を描く(中点が中心より下の辺)
+    for(let i=0;i<4;i++){
+      const a = corners[i], b = corners[(i+1)%4];
+      const wall = t.walls[i];
+      const midY = (a.sy+b.sy)/2;
+      if(midY > c.sy + 0.5){
+        // 辺の向きで明暗をつける
+        const ang = Math.atan2(b.sy-a.sy, b.sx-a.sx);
+        const bright = Math.cos(ang - Math.PI*0.75);
+        wall.setAttribute("points", `${a.sx},${a.sy} ${b.sx},${b.sy} ${b.sx},${b.sy+DEPTH} ${a.sx},${a.sy+DEPTH}`);
+        wall.setAttribute("fill", shade(t.color, -46 + Math.round(22*bright)));
+        wall.style.display = "";
+      } else {
+        wall.style.display = "none";
+      }
+    }
+    shadowPolys[p.id].setAttribute("points",
+      corners.map(q=>`${q.sx},${q.sy + DEPTH + 8}`).join(" "));
+    t.label.setAttribute("x", c.sx);
+    t.label.setAttribute("y", c.sy + 5);
+    positionPin(p.id);
+  });
+  // 奥→手前の順に並べ替え
+  [...PREFS].sort((a,b)=>tiles[a.id].depth - tiles[b.id].depth)
+    .forEach(p=>tileLayer.appendChild(tiles[p.id].g));
+  positionWaveMarks();
+  positionBubble();
+}
+
+/* ピン(メモがある県に表示) */
+function memoCount(id){ return (db.prefs[id]?.memos||[]).length; }
+function pinMarkup(id){
+  const t = tiles[id];
+  const n = memoCount(id);
+  if(n===0) return "";
+  const cx = t.cx, cy = t.cy;
+  return `
+    <path d="M${cx} ${cy-6} C ${cx-14} ${cy-22}, ${cx-14} ${cy-42}, ${cx} ${cy-42}
+             C ${cx+14} ${cy-42}, ${cx+14} ${cy-22}, ${cx} ${cy-6} Z"
+          fill="var(--pin)" stroke="#fff" stroke-width="2.5"/>
+    <circle cx="${cx}" cy="${cy-31}" r="5.5" fill="#fff"/>
+    ${n>1?`<circle cx="${cx+13}" cy="${cy-42}" r="8" fill="var(--accent)" stroke="#fff" stroke-width="2"/>
+    <text x="${cx+13}" y="${cy-38.5}" text-anchor="middle" font-size="9" font-weight="900" fill="#6B4A00">${n}</text>`:""}`;
+}
+function positionPin(id){
+  const slot = tiles[id].pinSlot;
+  if(slot.dataset.on==="1"){ slot.innerHTML = pinMarkup(id); }
+}
+function renderPin(id, animate){
+  const slot = tiles[id].pinSlot;
+  if(memoCount(id)===0){ slot.dataset.on="0"; slot.innerHTML=""; return; }
+  slot.dataset.on="1";
+  slot.innerHTML = `<g class="pin-g ${animate?"pin-drop":""}">${pinMarkup(id)}</g>`;
+}
+
+/* ============================================================
+   カメラ(パン / ズーム / 回転)
+============================================================ */
+let HOME = [0,0,100,100];
+function computeHome(){
+  let minX=1e9,minY=1e9,maxX=-1e9,maxY=-1e9;
+  PREFS.forEach(p=>{
+    const t = tiles[p.id];
+    minX=Math.min(minX,t.cx-TW); maxX=Math.max(maxX,t.cx+TW);
+    minY=Math.min(minY,t.cy-TH); maxY=Math.max(maxY,t.cy+TH+DEPTH);
+  });
+  const PAD=80;
+  HOME=[minX-PAD,minY-PAD,(maxX-minX)+PAD*2,(maxY-minY)+PAD*2];
+}
+let vb;
+function applyVB(){
+  svg.setAttribute("viewBox", vb.join(" "));
+  positionBubble();
+}
+
+let animId=null, tweenDone=null;
+function tweenVB(target, dur=550, onDone){
+  cancelAnimationFrame(animId);
+  tweenDone = onDone || null;   // 新しいトゥイーンが始まったら古いコールバックは破棄
+  const from=[...vb], t0=performance.now();
+  const ease=t=>1-Math.pow(1-t,3);
+  (function step(now){
+    const t=Math.min(1,(now-t0)/dur), e=ease(t);
+    vb=from.map((v,i)=>v+(target[i]-v)*e);
+    applyVB();
+    if(t<1) animId=requestAnimationFrame(step);
+    else { const cb=tweenDone; tweenDone=null; if(cb) cb(); }
+  })(t0);
+}
+function aspect(){ return svg.clientHeight/(svg.clientWidth||1); }
+function zoomToTile(id, onDone){
+  const t=tiles[id];
+  const w=360, h=360*aspect();
+  tweenVB([t.cx-w/2, t.cy-h/2+30, w, h], 550, onDone);
+}
+/* 見やすい状態ならカメラを動かさない。ズームだけOKなら位置合わせ、両方NGならズームイン。
+   カメラが落ち着いたら onSettled を呼ぶ(動かない場合は即時) */
+function ensureView(id, onSettled){
+  const t=tiles[id];
+  const W=svg.clientWidth||1, H=svg.clientHeight||1;
+  const zoomOK = vb[2]>=230 && vb[2]<=660;           // 快適なズーム範囲
+  const sx=(t.cx-vb[0])/vb[2]*W, sy=(t.cy-vb[1])/vb[3]*H;
+  const posOK = sx>W*0.18 && sx<W*0.82 && sy>H*0.3 && sy<H*0.85; // 吹き出しが収まる位置
+  if(zoomOK && posOK){ if(onSettled) onSettled(); return; }   // そのまま
+  if(zoomOK){                                         // ズームは維持して位置だけ寄せる
+    tweenVB([t.cx-vb[2]/2, t.cy-vb[3]*0.42, vb[2], vb[3]], 450, onSettled);
+  } else {
+    zoomToTile(id, onSettled);
+  }
+}
+function zoomHome(){ computeHome(); const h=[...HOME]; const a=aspect(); if(h[3]/h[2]<a){const nh=h[2]*a;h[1]-=(nh-h[3])/2;h[3]=nh;} tweenVB(h); }
+function zoomBy(f, cxs, cys){
+  const nw=Math.max(150,Math.min(HOME[2]*2, vb[2]*f));
+  const nh=nw*vb[3]/vb[2];
+  const fx=cxs!==undefined?(cxs/svg.clientWidth):0.5;
+  const fy=cys!==undefined?(cys/svg.clientHeight):0.5;
+  vb=[vb[0]+(vb[2]-nw)*fx, vb[1]+(vb[3]-nh)*fy, nw, nh];
+  applyVB();
+}
+
+/* 回転(アニメーション) */
+let rotAnim=null;
+function rotateBy(delta, dur=420){
+  cancelAnimationFrame(rotAnim);
+  const from=rot, to=rot+delta, t0=performance.now();
+  const ease=t=>1-Math.pow(1-t,3);
+  (function step(now){
+    const t=Math.min(1,(now-t0)/dur);
+    rot=from+(to-from)*ease(t);
+    renderMap();
+    if(t<1) rotAnim=requestAnimationFrame(step);
+  })(t0);
+}
+
+/* ---- ジェスチャー: 1本指=パン / 2本指=ピンチ(ズーム+回転) ---- */
+const pointers=new Map();
+let gesture=null;
+let downInfo=null;
+
+stage.addEventListener("pointerdown", e=>{
+  if(e.target.closest(".tile")) return;
+  try{ stage.setPointerCapture(e.pointerId); }catch(err){}
+  pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  downInfo={x:e.clientX,y:e.clientY,moved:false};
+  if(pointers.size===1){
+    gesture={type:"pan", x:e.clientX, y:e.clientY, vb:[...vb]};
+  } else if(pointers.size===2){
+    const [a,b]=[...pointers.values()];
+    gesture={
+      type:"pinch",
+      dist:Math.hypot(b.x-a.x,b.y-a.y),
+      ang:Math.atan2(b.y-a.y,b.x-a.x),
+      mid:{x:(a.x+b.x)/2,y:(a.y+b.y)/2},
+      vb:[...vb], rot:rot
+    };
+  }
+  stage.classList.add("dragging");
+});
+stage.addEventListener("pointermove", e=>{
+  if(!pointers.has(e.pointerId)) return;
+  pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(downInfo && Math.hypot(e.clientX-downInfo.x,e.clientY-downInfo.y)>6) downInfo.moved=true;
+  if(!gesture) return;
+  if(gesture.type==="pan" && pointers.size===1){
+    const scale=gesture.vb[2]/svg.clientWidth;
+    vb[0]=gesture.vb[0]-(e.clientX-gesture.x)*scale;
+    vb[1]=gesture.vb[1]-(e.clientY-gesture.y)*scale;
+    applyVB();
+  } else if(gesture.type==="pinch" && pointers.size>=2){
+    const [a,b]=[...pointers.values()];
+    const dist=Math.hypot(b.x-a.x,b.y-a.y);
+    const ang=Math.atan2(b.y-a.y,b.x-a.x);
+    const mid={x:(a.x+b.x)/2,y:(a.y+b.y)/2};
+    // ズーム
+    const f=gesture.dist/Math.max(1,dist);
+    const nw=Math.max(150,Math.min(HOME[2]*2, gesture.vb[2]*f));
+    const nh=nw*gesture.vb[3]/gesture.vb[2];
+    const fx=mid.x/svg.clientWidth, fy=mid.y/svg.clientHeight;
+    vb=[gesture.vb[0]+(gesture.vb[2]-nw)*fx, gesture.vb[1]+(gesture.vb[3]-nh)*fy, nw, nh];
+    // パン(中点移動)
+    const scale=vb[2]/svg.clientWidth;
+    vb[0]-=(mid.x-gesture.mid.x)*scale;
+    vb[1]-=(mid.y-gesture.mid.y)*scale;
+    // 回転
+    rot=gesture.rot+(ang-gesture.ang);
+    renderMap();
+    applyVB();
+  }
+});
+function endPointer(e){
+  pointers.delete(e.pointerId);
+  if(pointers.size===0){
+    stage.classList.remove("dragging");
+    gesture=null;
+    // タップ(移動なし) → 選択解除
+    if(downInfo && !downInfo.moved && mode!=="overview") deselect();
+    downInfo=null;
+  } else if(pointers.size===1){
+    const [a]=[...pointers.values()];
+    gesture={type:"pan", x:a.x, y:a.y, vb:[...vb]};
+  }
+}
+stage.addEventListener("pointerup", endPointer);
+stage.addEventListener("pointercancel", endPointer);
+stage.addEventListener("wheel", e=>{
+  e.preventDefault();
+  if(e.ctrlKey){ // トラックパッドの回転/ピンチ
+    zoomBy(e.deltaY>0?1.08:0.93, e.clientX, e.clientY);
+  } else if(e.shiftKey){
+    rot += e.deltaY*0.002; renderMap();
+  } else {
+    zoomBy(e.deltaY>0?1.12:0.89, e.clientX, e.clientY);
+  }
+},{passive:false});
+
+document.getElementById("zoomIn").addEventListener("click",()=>zoomBy(0.8));
+document.getElementById("zoomOut").addEventListener("click",()=>zoomBy(1.25));
+document.getElementById("rotL").addEventListener("click",()=>rotateBy(-Math.PI/4));
+document.getElementById("rotR").addEventListener("click",()=>rotateBy(Math.PI/4));
+document.getElementById("homeBtn").addEventListener("click",()=>{
+  // 位置リセット: 選択解除 + 回転を0に戻す + 全体表示
+  deselect();
+  rotateBy(-rot);
+  zoomHome();
+});
+
+/* ============================================================
+   選択フロー: タップ → ズーム+吹き出し → 編集
+============================================================ */
+let mode="overview"; // overview | preview | edit
+let current=null;
+const bubble=document.getElementById("bubble");
+const prefBadge=document.getElementById("prefBadge");
+
+function latestItem(id){
+  const e=db.prefs[id];
+  if(!e) return null;
+  let best=null;
+  (e.stats||[]).forEach(s=>{ if(!best||((s.t||0)>(best.t||0))) best={...s,type:"stat"}; });
+  (e.memos||[]).forEach(m=>{ if(!best||((m.t||0)>(best.t||0))) best={...m,type:"memo"}; });
+  return best;
+}
+function folderName(fid){
+  const f=db.folders.find(f=>f.id===fid);
+  return f?f.name:"";
+}
+
+function select(id){
+  current=id; mode="preview";
+  const p=PREF_BY_ID[id];
+  entry(id); save();
+  document.querySelectorAll(".tile.selected").forEach(t=>t.classList.remove("selected"));
+  tiles[id].g.classList.add("selected");
+  // ヘッダーのタイトルと入れ替えでバッジ表示
+  document.querySelector("header .title").style.display="none";
+  prefBadge.style.display="flex";
+  prefBadge.querySelector(".dot").style.background=REGIONS[p.r].color;
+  prefBadge.querySelector(".nm").textContent=p.name;
+  prefBadge.querySelector(".rg").textContent=REGIONS[p.r].name+"地方 / "+p.en;
+  // 吹き出し
+  const item=latestItem(id);
+  const bItem=document.getElementById("bItem");
+  if(item){
+    if(item.type==="memo"){
+      bItem.className="b-item";
+      bItem.innerHTML=`<svg class="ic"><use href="#i-note"/></svg><span>${esc(firstLine(item.text))}${item.folder?` <small style="color:#8FB2C2">(${esc(folderName(item.folder))})</small>`:""}</span>`;
+    }else{
+      bItem.className="b-item";
+      bItem.innerHTML=`<svg class="ic"><use href="#i-chart"/></svg><span><b>${esc(item.k)}</b>: ${esc(item.v)}</span>`;
+    }
+  }else{
+    bItem.className="b-item";
+    bItem.innerHTML=`<svg class="ic"><use href="#i-plus"/></svg><span style="color:#8FB2C2">まだ記録がありません</span>`;
+  }
+  const e=db.prefs[id];
+  document.getElementById("bMeta").textContent=
+    `データ ${e.stats.length}件 ・ メモ ${e.memos.length}件`;
+  bubble.style.display="none";                 // ズーム完了までは出さない
+  ensureView(id, ()=>{
+    if(current!==id || mode!=="preview") return;   // その間に操作されていたら出さない
+    positionBubble(true);
+    bubble.style.display="block";
+    bubble.classList.remove("grow");
+    void bubble.offsetWidth;                   // アニメーションを再スタート
+    bubble.classList.add("grow");
+  });
+}
+function positionBubble(force){
+  if(mode!=="preview"||!current) return;
+  if(!force && bubble.style.display==="none") return;  // 表示前は追従不要
+  const t=tiles[current];
+  const sx=(t.cx-vb[0])/vb[2]*svg.clientWidth;
+  const sy=(t.cy-vb[1])/vb[3]*svg.clientHeight;
+  bubble.style.left=sx+"px";
+  bubble.style.top=(sy-58)+"px";
+}
+function deselect(){
+  mode="overview"; 
+  bubble.style.display="none";
+  prefBadge.style.display="none";
+  document.querySelector("header .title").style.display="flex";
+  panel.classList.remove("open");
+  panel.setAttribute("aria-hidden","true");
+  document.querySelectorAll(".tile.selected").forEach(t=>t.classList.remove("selected"));
+  current=null;   // ズームアウトはしない(その場に留まる)
+}
+document.getElementById("bCancel").addEventListener("click", deselect);
+document.getElementById("bEdit").addEventListener("click", openEditor);
+document.addEventListener("keydown", e=>{
+  if(e.key==="Escape"){
+    if(document.querySelector(".overlay.open")) closeOverlays();
+    else if(mode==="edit" && document.getElementById("memoView").classList.contains("show")) closeMemoView();
+    else if(mode==="edit"){ mode="preview"; panel.classList.remove("open"); panel.setAttribute("aria-hidden","true"); bubble.style.display="block"; positionBubble(); }
+    else if(mode==="preview") deselect();
+  }
+});
+
+/* ============================================================
+   編集パネル
+============================================================ */
+const panel=document.getElementById("panel");
+function openEditor(){
+  if(!current) return;
+  mode="edit";
+  bubble.style.display="none";
+  const p=PREF_BY_ID[current];
+  const c=REGIONS[p.r].color;
+  document.getElementById("panelHead").style.background=`linear-gradient(135deg, ${c}, ${shade(c,-40)})`;
+  document.getElementById("pRegion").textContent=REGIONS[p.r].name+"地方";
+  document.getElementById("pName").textContent=p.name;
+  document.getElementById("pEn").textContent=p.en;
+  // メモ専用画面を閉じてデータ一覧から始める
+  document.getElementById("memoView").classList.remove("show");
+  document.getElementById("panelBody").classList.remove("hidden");
+  renderStats(); renderMemos();
+  panel.classList.add("open");
+  panel.setAttribute("aria-hidden","false");
+}
+document.getElementById("closeBtn").addEventListener("click", ()=>{
+  panel.classList.remove("open");
+  panel.setAttribute("aria-hidden","true");
+  if(current){ select(current); } // プレビューに戻る
+});
+
+function esc(s){ return String(s??"").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+
+function folderSelect(sel, onChange){
+  const s=document.createElement("select");
+  s.className="fsel";
+  s.innerHTML=`<option value="">フォルダなし</option>`+
+    db.folders.map(f=>`<option value="${esc(f.id)}"${f.id===sel?" selected":""}>${esc(f.name)}</option>`).join("");
+  s.addEventListener("change",()=>onChange(s.value));
+  return s;
+}
+
+/* ---- データ ---- */
+function renderStats(){
+  const e=entry(current);
+  const list=document.getElementById("statList");
+  document.getElementById("statCount").textContent=e.stats.length+"件";
+  list.innerHTML="";
+  if(e.stats.length===0) list.innerHTML=`<div class="empty">まだデータがありません</div>`;
+  e.stats.forEach((s,i)=>{
+    const row=document.createElement("div");
+    row.className="card";
+    const ki=document.createElement("input"); ki.type="text"; ki.className="k"; ki.placeholder="項目名"; ki.value=s.k;
+    const vi=document.createElement("input"); vi.type="text"; vi.placeholder="内容"; vi.value=s.v;
+    ki.addEventListener("change",()=>{s.k=ki.value;save();});
+    vi.addEventListener("change",()=>{s.v=vi.value;save();});
+    const fs=folderSelect(s.folder,(v)=>{s.folder=v;save();});
+    const del=document.createElement("button");
+    del.className="icon-btn"; del.setAttribute("aria-label","削除");
+    del.innerHTML=`<svg class="ic"><use href="#i-trash"/></svg>`;
+    del.addEventListener("click",()=>{e.stats.splice(i,1);save();renderStats();toast("データを削除しました");});
+    row.append(ki,vi,fs,del);
+    list.appendChild(row);
+  });
+}
+document.getElementById("addStat").addEventListener("click",()=>{
+  entry(current).stats.push({k:"",v:"",folder:"",t:Date.now()});
+  save(); renderStats();
+  const inputs=document.querySelectorAll("#statList .card:last-child input");
+  if(inputs[0]) inputs[0].focus();
+});
+
+/* ---- メモ(リスト: 1行目プレビュー → タップで専用画面) ---- */
+function firstLine(s){
+  const line=String(s??"").split(/\r?\n/)[0].trim();
+  return line || "(空のメモ)";
+}
+function renderMemos(){
+  const e=entry(current);
+  const list=document.getElementById("memoList");
+  document.getElementById("memoCount").textContent=e.memos.length?e.memos.length+"件":"";
+  list.innerHTML="";
+  if(e.memos.length===0) list.innerHTML=`<div class="empty">メモはまだありません。書くとマップにピンが立ちます</div>`;
+  e.memos.forEach((m,i)=>{
+    const row=document.createElement("button");
+    row.className="card memo-row";
+    row.setAttribute("aria-label","メモを開く");
+    row.style.width="100%"; row.style.border="none"; row.style.textAlign="left"; row.style.fontFamily="inherit";
+    row.innerHTML=`
+      <span class="m-ic"><svg class="ic"><use href="#i-note"/></svg></span>
+      <span class="prev">${esc(firstLine(m.text))}</span>
+      ${m.folder?`<span class="f-chip">${esc(folderName(m.folder))}</span>`:""}
+      <svg class="ic chev"><use href="#i-back" transform="rotate(180 12 12)"/></svg>`;
+    row.addEventListener("click",()=>openMemo(i));
+    list.appendChild(row);
+  });
+}
+
+/* ---- メモ専用画面(閲覧⇄編集) ---- */
+const memoView=document.getElementById("memoView");
+const panelBody=document.getElementById("panelBody");
+const memoPaper=document.getElementById("memoPaper");
+const memoRead=document.getElementById("memoRead");
+const memoTa=document.getElementById("memoTa");
+const memoDoneBtn=document.getElementById("memoDone");
+let memoIdx=null;
+
+function openMemo(i){
+  memoIdx=i;
+  const m=entry(current).memos[i];
+  if(!m) return;
+  memoRead.textContent=m.text;
+  memoPaper.classList.remove("editing");
+  memoDoneBtn.classList.remove("show");
+  // フォルダ選択を差し込み
+  const slot=document.getElementById("memoFolderSlot");
+  slot.innerHTML="";
+  slot.appendChild(folderSelect(m.folder,(v)=>{m.folder=v;save();}));
+  panelBody.classList.add("hidden");
+  memoView.classList.add("show");
+  memoView.scrollTop=0;
+}
+function memoStartEdit(){
+  const m=entry(current)?.memos[memoIdx];
+  if(!m) return;
+  memoTa.value=m.text;
+  memoPaper.classList.add("editing");
+  memoDoneBtn.classList.add("show");
+  memoTa.focus();
+}
+memoPaper.addEventListener("click",()=>{
+  if(!memoPaper.classList.contains("editing")) memoStartEdit();
+});
+memoDoneBtn.addEventListener("click",()=>{
+  const m=entry(current)?.memos[memoIdx];
+  if(m){ m.text=memoTa.value; m.t=Date.now(); save(); }
+  memoRead.textContent=m?m.text:"";
+  memoPaper.classList.remove("editing");
+  memoDoneBtn.classList.remove("show");
+});
+function closeMemoView(){
+  memoIdx=null;
+  memoView.classList.remove("show");
+  panelBody.classList.remove("hidden");
+  renderMemos();
+}
+document.getElementById("memoBack").addEventListener("click",closeMemoView);
+document.getElementById("memoDel").addEventListener("click",()=>{
+  const e=entry(current);
+  const m=e?.memos[memoIdx];
+  if(!m) return;
+  if(!confirm("このメモを削除しますか?")) return;
+  e.memos.splice(memoIdx,1);
+  save(); renderPin(current,false);
+  closeMemoView();
+  toast("メモを削除しました");
+});
+
+function addMemo(){
+  const input=document.getElementById("memoInput");
+  const text=input.value.trim();
+  if(!text||!current) return;
+  const e=entry(current);
+  e.memos.push({id:Date.now(),text,folder:"",t:Date.now()});
+  input.value="";
+  save(); renderMemos();
+  renderPin(current, e.memos.length===1);   // 記入した段階でピンが立つ
+  if(e.memos.length===1) toast("マップにピンが立ちました");
+}
+document.getElementById("memoAdd").addEventListener("click",addMemo);
+document.getElementById("memoInput").addEventListener("keydown",e=>{if(e.key==="Enter")addMemo();});
+
+/* ============================================================
+   フォルダ
+============================================================ */
+const folderOverlay=document.getElementById("folderOverlay");
+const folderBody=document.getElementById("folderBody");
+const folderTitle=document.getElementById("folderTitle");
+
+function folderItems(fid){
+  const out=[];
+  for(const [pid,e] of Object.entries(db.prefs)){
+    (e.stats||[]).forEach(s=>{ if(s.folder===fid) out.push({pid,type:"stat",item:s}); });
+    (e.memos||[]).forEach(m=>{ if(m.folder===fid) out.push({pid,type:"memo",item:m}); });
+  }
+  return out.sort((a,b)=>(b.item.t||0)-(a.item.t||0));
+}
+
+function renderFolderList(){
+  folderTitle.textContent="フォルダ";
+  folderBody.innerHTML="";
+  if(db.folders.length===0){
+    folderBody.innerHTML=`<div class="empty">フォルダはまだありません</div>`;
+  }
+  db.folders.forEach((f)=>{
+    const cnt=folderItems(f.id).length;
+    const row=document.createElement("div");
+    row.className="fold-row";
+    const open=document.createElement("button");
+    open.className="open-f";
+    open.innerHTML=`<svg class="ic"><use href="#i-folder"/></svg>${esc(f.name)}`;
+    open.addEventListener("click",()=>renderFolderContents(f));
+    const c=document.createElement("span");
+    c.className="cnt"; c.textContent=cnt+"件";
+    const ren=document.createElement("button");
+    ren.className="icon-btn"; ren.setAttribute("aria-label","名前を変更");
+    ren.style.color="#4E93AC";
+    ren.innerHTML=`<svg class="ic"><use href="#i-edit"/></svg>`;
+    ren.addEventListener("click",()=>{
+      const nm=prompt("フォルダ名を変更",f.name);
+      if(nm&&nm.trim()){f.name=nm.trim();save();renderFolderList();}
+    });
+    const del=document.createElement("button");
+    del.className="icon-btn"; del.setAttribute("aria-label","削除");
+    del.innerHTML=`<svg class="ic"><use href="#i-trash"/></svg>`;
+    del.addEventListener("click",()=>{
+      if(!confirm(`フォルダ「${f.name}」を削除しますか?(中の記録は「フォルダなし」になります)`)) return;
+      for(const e of Object.values(db.prefs)){
+        (e.stats||[]).forEach(s=>{if(s.folder===f.id)s.folder="";});
+        (e.memos||[]).forEach(m=>{if(m.folder===f.id)m.folder="";});
+      }
+      db.folders=db.folders.filter(x=>x.id!==f.id);
+      save(); renderFolderList();
+      if(mode==="edit"){renderStats();renderMemos();}
+    });
+    row.append(open,c,ren,del);
+    folderBody.appendChild(row);
+  });
+  const add=document.createElement("button");
+  add.className="add-btn";
+  add.textContent="＋ フォルダを追加";
+  add.addEventListener("click",()=>{
+    const nm=prompt("新しいフォルダ名(例: 食べ物)");
+    if(nm&&nm.trim()){
+      db.folders.push({id:"f-"+Date.now(),name:nm.trim()});
+      save(); renderFolderList();
+    }
+  });
+  folderBody.appendChild(add);
+}
+
+function renderFolderContents(f){
+  folderTitle.textContent=f.name;
+  folderBody.innerHTML="";
+  const back=document.createElement("button");
+  back.className="back-btn";
+  back.innerHTML=`<svg class="ic"><use href="#i-back"/></svg> フォルダ一覧へ`;
+  back.addEventListener("click",renderFolderList);
+  folderBody.appendChild(back);
+  const items=folderItems(f.id);
+  if(items.length===0){
+    folderBody.insertAdjacentHTML("beforeend",`<div class="empty">このフォルダはまだ空です。<br>各都道府県の編集画面で、記録にフォルダを設定できます</div>`);
+    return;
+  }
+  items.forEach(({pid,type,item})=>{
+    const p=PREF_BY_ID[pid];
+    const row=document.createElement("button");
+    row.className="m-item f-item";
+    row.innerHTML=`
+      <span class="pref-tag" style="background:${REGIONS[p.r].color}">${esc(p.name)}</span>
+      <svg class="ic"><use href="#${type==="memo"?"i-note":"i-chart"}"/></svg>
+      <span class="txt">${type==="memo"?esc(firstLine(item.text)):`<b>${esc(item.k)}</b>: ${esc(item.v)}`}</span>`;
+    row.addEventListener("click",()=>{
+      closeOverlays();
+      select(pid);
+      openEditor();
+    });
+    folderBody.appendChild(row);
+  });
+}
+
+document.getElementById("folderBtn").addEventListener("click",()=>{
+  renderFolderList();
+  folderOverlay.classList.add("open");
+});
+
+/* ============================================================
+   設定 / 書き出し / 読み込み
+============================================================ */
+document.getElementById("settingsBtn").addEventListener("click",()=>{
+  document.getElementById("settingsOverlay").classList.add("open");
+});
+function closeOverlays(){
+  document.querySelectorAll(".overlay.open").forEach(o=>o.classList.remove("open"));
+}
+document.querySelectorAll(".overlay").forEach(o=>{
+  o.addEventListener("click",e=>{ if(e.target===o) closeOverlays(); });
+});
+document.querySelectorAll("[data-close]").forEach(b=>{
+  b.addEventListener("click",()=>closeOverlays());
+});
+
+document.getElementById("exportBtn").addEventListener("click",()=>{
+  const blob=new Blob([JSON.stringify(db,null,2)],{type:"application/json"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download="japan-map-memo.json";
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast("データを書き出しました");
+});
+document.getElementById("importBtn").addEventListener("click",()=>document.getElementById("importFile").click());
+document.getElementById("importFile").addEventListener("change",e=>{
+  const f=e.target.files[0];
+  if(!f) return;
+  const r=new FileReader();
+  r.onload=()=>{
+    try{
+      const parsed=JSON.parse(r.result);
+      if(parsed.prefs&&parsed.folders){ db=parsed; }
+      else{ // v1形式
+        db=freshDB();
+        for(const [id,en] of Object.entries(parsed)){
+          db.prefs[id]={
+            stats:(en.stats||[]).map(s=>({...s,folder:s.folder||"",t:s.t||0})),
+            memos:(en.memos||[]).map(m=>({...m,folder:m.folder||"",t:m.t||m.id||0}))
+          };
+        }
+      }
+      save();
+      PREFS.forEach(p=>renderPin(p.id,false));
+      if(mode==="edit"){renderStats();renderMemos();}
+      closeOverlays();
+      toast("データを読み込みました");
+    }catch(err){ toast("読み込めませんでした(JSON形式を確認してください)"); }
+  };
+  r.readAsText(f);
+  e.target.value="";
+});
+document.getElementById("resetBtn").addEventListener("click",()=>{
+  if(!confirm("すべてのデータとメモを初期状態に戻します。よろしいですか?")) return;
+  db=freshDB(); save();
+  PREFS.forEach(p=>renderPin(p.id,false));
+  deselect(); closeOverlays();
+  toast("データを初期化しました");
+});
+
+/* ---- 凡例 & トースト ---- */
+const legend=document.getElementById("legend");
+Object.values(REGIONS).forEach(r=>{
+  const chip=document.createElement("span");
+  chip.className="chip";
+  chip.innerHTML=`<i style="background:${r.color}"></i>${r.name}`;
+  legend.appendChild(chip);
+});
+let toastTimer;
+function toast(msg){
+  const t=document.getElementById("toast");
+  t.textContent=msg;
+  t.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>t.classList.remove("show"),2200);
+}
+
+/* ---- 初期化 ---- */
+renderMap();
+computeHome();
+vb=[...HOME];
+applyVB();
+PREFS.forEach(p=>renderPin(p.id,false));
+window.addEventListener("resize",()=>{ applyVB(); });  // 海面の被覆も含めて再計算
+</script>
+</body>
+</html>
